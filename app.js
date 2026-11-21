@@ -339,6 +339,11 @@
         cues.push({ text: seg.text, words: [], start: null, end: null });
         return;
       }
+      // 자막이 너무 길면 단어 경계에서 나누되, 조각 길이가 비슷해지게
+      const plainTotal = ws.reduce((a, w) => a + stripPunct(w.raw).length, 0) + (ws.length - 1);
+      const target = Math.ceil(plainTotal / Math.max(1, Math.ceil(plainTotal / MAX_CHARS)));
+
+      const local = [];
       let chunk = [];
       let len = 0;
       const flush = () => {
@@ -351,7 +356,7 @@
         let slice = text.slice(from, to).trim();
         const joined = chunk.map((w) => w.raw).join(' ');
         if (!slice || stripPunct(slice) !== stripPunct(joined)) slice = joined;
-        cues.push({
+        local.push({
           text: slice,
           words: chunk.slice(),
           start: head.offset_ms / 1000,
@@ -362,11 +367,24 @@
       };
       for (const w of ws) {
         const add = (len ? 1 : 0) + stripPunct(w.raw).length;
-        if (chunk.length && len + add > MAX_CHARS) flush();
+        if (chunk.length && len + add > target) flush();
         chunk.push(w);
         len += add;
       }
       flush();
+
+      // 마지막 조각이 한두 단어짜리로 남으면 앞 조각에 붙임
+      while (local.length > 1) {
+        const last = local[local.length - 1];
+        const prev = local[local.length - 2];
+        if (stripPunct(last.text).length < 12 && stripPunct(prev.text).length + stripPunct(last.text).length <= MAX_CHARS + 10) {
+          prev.text = `${prev.text} ${last.text}`.trim();
+          prev.words = prev.words.concat(last.words);
+          prev.end = last.end;
+          local.pop();
+        } else break;
+      }
+      cues.push(...local);
     });
 
     // 단어가 없는 큐는 글자 수로 길이 추정
@@ -406,6 +424,30 @@
     return cues;
   }
 
+  // 긴 문장을 단어 경계에서 비슷한 길이로 나눈다
+  function splitLong(text, maxChars) {
+    const t = String(text || '').replace(/\s+/g, ' ').trim();
+    if (t.length <= maxChars) return [t];
+    const parts = Math.ceil(t.length / maxChars);
+    const target = Math.ceil(t.length / parts);
+    const out = [];
+    let cur = '';
+    for (const w of t.split(' ')) {
+      if (!cur) { cur = w; continue; }
+      if ((cur + ' ' + w).length <= target) cur += ' ' + w;
+      else { out.push(cur); cur = w; }
+    }
+    if (cur) out.push(cur);
+    while (out.length > 1) {
+      const last = out[out.length - 1];
+      const prev = out[out.length - 2];
+      if (last.length < 12 && (prev + ' ' + last).length <= maxChars + 10) {
+        out.splice(out.length - 2, 2, `${prev} ${last}`);
+      } else break;
+    }
+    return out.length ? out : [t];
+  }
+
   // 단어 타이밍 없이(서버 없이) 만드는 추정 자막
   function estimateCues(text, mode) {
     const segs = splitSegments(text, mode);
@@ -413,16 +455,9 @@
     const total = estimate(text, currentVoice(), rate);
     const MAX_CHARS = 34;
 
-    // 긴 줄은 단어 경계에서 잘라 자막 한 장이 너무 길지 않게
     const pieces = [];
     for (const s of segs) {
-      if (s.text.length <= MAX_CHARS) { pieces.push(s.text); continue; }
-      let cur = '';
-      for (const w of s.text.split(' ')) {
-        if (cur && (cur + ' ' + w).length > MAX_CHARS) { pieces.push(cur); cur = w; }
-        else cur = cur ? cur + ' ' + w : w;
-      }
-      if (cur) pieces.push(cur);
+      for (const p of splitLong(s.text, MAX_CHARS)) pieces.push(p);
     }
 
     const weights = pieces.map((p) => Math.max(1, stripPunct(p).length));
