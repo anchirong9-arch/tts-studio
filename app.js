@@ -401,12 +401,26 @@
     const segs = splitSegments(text, mode);
     const rate = Number(el.rate.value);
     const total = estimate(text, currentVoice(), rate);
-    const weights = segs.map((s) => Math.max(1, stripPunct(s.text).length));
+    const MAX_CHARS = 34;
+
+    // 긴 줄은 단어 경계에서 잘라 자막 한 장이 너무 길지 않게
+    const pieces = [];
+    for (const s of segs) {
+      if (s.text.length <= MAX_CHARS) { pieces.push(s.text); continue; }
+      let cur = '';
+      for (const w of s.text.split(' ')) {
+        if (cur && (cur + ' ' + w).length > MAX_CHARS) { pieces.push(cur); cur = w; }
+        else cur = cur ? cur + ' ' + w : w;
+      }
+      if (cur) pieces.push(cur);
+    }
+
+    const weights = pieces.map((p) => Math.max(1, stripPunct(p).length));
     const sum = weights.reduce((a, b) => a + b, 0) || 1;
     let t = 0.1;
-    return segs.map((s, i) => {
+    return pieces.map((p, i) => {
       const dur = Math.max(0.6, (total - 0.1) * (weights[i] / sum));
-      const cue = { text: s.text, words: [], start: t, end: t + dur };
+      const cue = { text: p, words: [], start: t, end: t + dur };
       t += dur;
       return cue;
     });
@@ -443,8 +457,8 @@
 
   function buildSrt(cues) {
     return cues.map((c, i) => (
-      `${i + 1}\n${srtTime(c.start)} --> ${srtTime(c.end)}\n${wrapLine(c.text).join('\n')}\n`
-    )).join('\n');
+      `${i + 1}\r\n${srtTime(c.start)} --> ${srtTime(c.end)}\r\n${wrapLine(c.text).join('\r\n')}\r\n`
+    )).join('\r\n');
   }
 
   // ── 결과 렌더 ────────────────────────────────────────
