@@ -374,24 +374,24 @@
       prevEnd = c.end;
     }
 
-    // 다음 자막 시작까지 이어 주되, 너무 길게 남지 않게
+    // 다음 자막 시작까지만 남기고, 너무 길게 끌지 않는다
     for (let i = 0; i < cues.length; i += 1) {
       const c = cues[i];
       const next = cues[i + 1];
       if (next) {
-        const limit = c.end + 0.9;
-        c.end = Math.max(c.start + 0.45, Math.min(next.start + 0.05, limit));
+        c.end = Math.max(c.start + 0.4, Math.min(next.start, c.end + 0.9));
       } else {
         c.end = c.end + 0.35;
       }
     }
 
-    // 시간 겹침/역전 정리
+    // 자막끼리 겹치지 않게 정리
     for (let i = 1; i < cues.length; i += 1) {
-      if (cues[i].start < cues[i - 1].end - 0.02 && cues[i].words.length && cues[i - 1].words.length) {
-        cues[i].start = Math.min(cues[i - 1].end, cues[i].start);
-      }
-      if (cues[i].end <= cues[i].start) cues[i].end = cues[i].start + 0.45;
+      const prev = cues[i - 1];
+      const cur = cues[i];
+      if (cur.start < prev.start) cur.start = prev.start;
+      if (cur.end <= cur.start) cur.end = cur.start + 0.4;
+      if (prev.end > cur.start) prev.end = cur.start;
     }
     return cues;
   }
@@ -729,7 +729,11 @@
       };
       el.splitHint.textContent = hint[el.split.value] || hint.auto;
       state.cues = [];
-      if (!el.subsWrap.hidden) ensureCues();
+      if (!el.subsWrap.hidden) {
+        const text = normalizeText(el.text.value);
+        if (state.words.length) renderCues(makeCues(text, state.words, el.split.value), true);
+        else ensureCues();
+      }
       saveSettings();
     });
 
