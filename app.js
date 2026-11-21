@@ -35,6 +35,7 @@
     generating: false,
     busyVoice: null,
     lastStamp: null,
+    generatedText: null,
   };
 
   // ── DOM ──────────────────────────────────────────────
@@ -536,6 +537,8 @@
     state.audioUrl = null;
     state.audioBlob = null;
     state.words = [];
+    state.cues = [];
+    state.generatedText = null;
     el.audio.removeAttribute('src');
     el.playerWrap.hidden = true;
     el.dlWrap.hidden = true;
@@ -543,6 +546,12 @@
     el.subsWrap.hidden = true;
     el.subsList.innerHTML = '';
     el.empty.hidden = false;
+  }
+
+  // 대본이 바뀌었을 때 결과만 걷어내고 새 대본으로 다시 시작
+  function resetGenerated() {
+    clearResult();
+    el.error.hidden = true;
   }
 
   function showError(msg, hint) {
@@ -631,6 +640,7 @@
       const cues = makeCues(text, state.words, el.split.value);
       renderCues(cues, state.words.length > 0);
       state.lastStamp = stamp();
+      state.generatedText = text;
       el.btnMp3.disabled = false;
       el.dlWrap.hidden = false;
       el.dlHint.hidden = true;
@@ -788,7 +798,14 @@
 
   // ── 이벤트 연결 ──────────────────────────────────────
   function bind() {
-    el.text.addEventListener('input', () => { updateEstimate(); saveSettings(); });
+    el.text.addEventListener('input', () => {
+      // 대본이 바뀌면 이전 음성·자막은 더 이상 이 대본의 결과가 아니다
+      if (state.generatedText && normalizeText(el.text.value) !== state.generatedText) {
+        resetGenerated();
+      }
+      updateEstimate();
+      saveSettings();
+    });
     el.rate.addEventListener('input', () => { syncSliders(); updateEstimate(); saveSettings(); });
     el.pitch.addEventListener('input', () => { syncSliders(); saveSettings(); });
     el.split.addEventListener('change', () => {
