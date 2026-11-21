@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<title>TTS 스튜디오 — 한국어 음성 + 자막</title>
+<meta name="description" content="한국어 TTS로 쇼츠 대본을 음성(MP3)과 자막(.srt)으로 한 번에. 예상 영상 길이 자동 계산, 속도·피치 조절, 목소리 3종.">
+<link rel="stylesheet" href="style.css?v=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%230b0d12'/%3E%3Crect x='13' y='6' width='6' height='13' rx='3' fill='%237c5cff'/%3E%3Cpath d='M8 16a8 8 0 0 0 16 0' stroke='%2322d3ee' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3Cpath d='M16 24v3' stroke='%2322d3ee' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="26" height="26"><rect x="11.5" y="4" width="9" height="15" rx="4.5" fill="#7c5cff"/><path d="M7.5 15.5a8.5 8.5 0 0 0 17 0" stroke="#22d3ee" stroke-width="2.6" fill="none" stroke-linecap="round"/><path d="M16 24.5v3" stroke="#22d3ee" stroke-width="2.6" stroke-linecap="round"/></svg>
+    </span>
+    <div class="brand-txt">
+      <b>TTS 스튜디오</b>
+      <small>쇼츠 대본 → 음성 MP3 + 자막 .srt</small>
+    </div>
+  </div>
+
+  <div class="top-right">
+    <div class="status" id="status" data-state="checking" title="로컬 서버 연결 상태">
+      <span class="dot" aria-hidden="true"></span>
+      <span id="statusText">서버 확인 중…</span>
+    </div>
+    <button type="button" class="ghost" id="btnRetry">연결 확인</button>
+  </div>
+</header>
+
+<!-- 서버가 꺼져 있을 때 안내 -->
+<section class="notice" id="notice" hidden>
+  <div class="notice-icon" aria-hidden="true">🖥️</div>
+  <div class="notice-body">
+    <b id="noticeTitle">로컬 서버가 꺼져 있어요</b>
+    <p id="noticeText">
+      이 화면은 음성 합성을 <b>내 PC에서</b> 합니다. 아래 3단계만 한 번 해 두면 계속 쓸 수 있어요.
+    </p>
+    <ol class="steps">
+      <li><b>ZIP 내려받기</b> → 압축 풀기</li>
+      <li>폴더 안의 <b>실행하기.bat</b> 더블클릭</li>
+      <li>자동으로 열리는 <b>http://127.0.0.1:8765</b> 창에서 사용</li>
+    </ol>
+    <div class="notice-actions">
+      <a class="btn primary" id="btnZip" href="https://github.com/anchirong9-arch/tts-studio/archive/refs/heads/main.zip" target="_blank" rel="noopener">⬇ ZIP 다운로드</a>
+      <a class="btn" href="http://127.0.0.1:8765/" target="_blank" rel="noopener">로컬 스튜디오 열기</a>
+      <button type="button" class="btn ghost" id="btnNoticeRetry">이미 켰어요 · 다시 확인</button>
+    </div>
+    <p class="notice-foot">서버 없이도 <b>예상 길이 계산</b>과 <b>예상 자막(.srt)</b>은 그대로 쓸 수 있습니다. 브라우저 미리듣기도 됩니다.</p>
+  </div>
+</section>
+
+<main class="layout">
+
+  <!-- ───── 대본 ───── -->
+  <section class="pane script" aria-label="대본 입력">
+    <div class="pane-head">
+      <h2>대본</h2>
+      <div class="counts">
+        <span id="charCount">0자</span>
+        <span class="sep">·</span>
+        <span id="charNoSpace">공백 제외 0자</span>
+        <button type="button" class="link" id="btnClear">지우기</button>
+      </div>
+    </div>
+
+    <label class="sr-only" for="text">대본</label>
+    <textarea id="text" spellcheck="false" placeholder="쇼츠 대본을 붙여넣으세요.
+
+줄바꿈으로 문장을 나누면 자막도 줄 단위로 딱 맞게 나옵니다.
+예) 이 영상 끝까지 보면 진짜 이유를 알게 됩니다."></textarea>
+
+    <div class="examples" role="group" aria-label="예시 문장">
+      <span class="ex-label">예시</span>
+      <button type="button" class="chip" data-ex="hook">쇼츠 훅</button>
+      <button type="button" class="chip" data-ex="review">제품 리뷰</button>
+      <button type="button" class="chip" data-ex="news">정보 전달</button>
+      <button type="button" class="chip" data-ex="greet">인사말</button>
+    </div>
+
+    <div class="durbar">
+      <div class="dur-row">
+        <span class="dur-label">예상 영상 길이</span>
+        <span class="dur-value"><b id="durValue">0.0초</b><i id="durClock">0:00</i></span>
+      </div>
+      <div class="meter" aria-hidden="true"><i id="durFill"></i></div>
+      <div class="badges" id="durBadges" aria-live="polite">
+        <span class="badge" data-limit="15">15초</span>
+        <span class="badge" data-limit="30">30초</span>
+        <span class="badge" data-limit="60">60초</span>
+        <span class="badge-note" id="durNote">대본을 입력하면 쇼츠 길이를 계산합니다</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───── 설정 ───── -->
+  <aside class="pane settings" aria-label="음성 설정">
+    <div class="pane-head"><h2>목소리</h2></div>
+
+    <div class="voices" id="voices" role="radiogroup" aria-label="목소리 선택">
+      <label class="voice on" data-voice="ko-KR-InJoonNeural">
+        <input type="radio" name="voice" value="ko-KR-InJoonNeural" checked>
+        <span class="v-avatar" aria-hidden="true">인</span>
+        <span class="v-body">
+          <b>인준 <em>남성</em></b>
+          <small>차분한 톤 · 설명·뉴스</small>
+        </span>
+        <button type="button" class="v-play" data-preview="ko-KR-InJoonNeural" title="미리듣기" aria-label="인준 미리듣기">▶</button>
+      </label>
+
+      <label class="voice" data-voice="ko-KR-SunHiNeural">
+        <input type="radio" name="voice" value="ko-KR-SunHiNeural">
+        <span class="v-avatar" aria-hidden="true">선</span>
+        <span class="v-body">
+          <b>선희 <em>여성</em></b>
+          <small>밝은 톤 · 쇼츠·친근함</small>
+        </span>
+        <button type="button" class="v-play" data-preview="ko-KR-SunHiNeural" title="미리듣기" aria-label="선희 미리듣기">▶</button>
+      </label>
+
+      <label class="voice" data-voice="ko-KR-HyunsuMultilingualNeural">
+        <input type="radio" name="voice" value="ko-KR-HyunsuMultilingualNeural">
+        <span class="v-avatar" aria-hidden="true">현</span>
+        <span class="v-body">
+          <b>현수 <em>남성</em></b>
+          <small>부드러운 톤 · 다국어</small>
+        </span>
+        <button type="button" class="v-play" data-preview="ko-KR-HyunsuMultilingualNeural" title="미리듣기" aria-label="현수 미리듣기">▶</button>
+      </label>
+    </div>
+
+    <div class="slider-block">
+      <div class="slider-head"><h3>속도</h3><b id="rateValue">+0%</b></div>
+      <input type="range" id="rate" min="-30" max="50" step="5" value="0" aria-label="속도">
+      <div class="scale"><span>-30%</span><span>0</span><span>+50%</span></div>
+    </div>
+
+    <div class="slider-block">
+      <div class="slider-head"><h3>피치</h3><b id="pitchValue">+0Hz</b></div>
+      <input type="range" id="pitch" min="-20" max="20" step="5" value="0" aria-label="피치">
+      <div class="scale"><span>-20Hz</span><span>0</span><span>+20Hz</span></div>
+    </div>
+
+    <div class="split-block">
+      <div class="slider-head"><h3>자막 분할</h3></div>
+      <select id="split" aria-label="자막 분할 방식">
+        <option value="auto">자동 (문장 + 길면 나눔)</option>
+        <option value="line">줄바꿈 기준</option>
+        <option value="sentence">마침표·쉼표 기준</option>
+      </select>
+      <p class="hint" id="splitHint">한 자막이 너무 길면 읽기 좋게 다시 나눕니다.</p>
+    </div>
+  </aside>
+</main>
+
+<!-- ───── 결과 ───── -->
+<section class="pane result" aria-label="생성 결과">
+  <div class="result-head">
+    <h2>음성 · 자막</h2>
+    <div class="result-meta" id="resultMeta"></div>
+  </div>
+
+  <div class="actions">
+    <button type="button" class="btn primary big" id="btnGenerate">
+      <span class="spin" hidden aria-hidden="true"></span>
+      <span id="btnGenerateText">🎧 음성 생성</span>
+      <kbd>Ctrl</kbd><kbd>↵</kbd>
+    </button>
+    <button type="button" class="btn" id="btnPreview" title="서버 없이 브라우저 음성으로 대충 들어보기">🔈 브라우저 미리듣기</button>
+    <button type="button" class="btn" id="btnStop" hidden>■ 정지</button>
+  </div>
+
+  <div class="error" id="error" hidden></div>
+
+  <div class="player" id="playerWrap" hidden>
+    <audio id="audio" controls preload="metadata"></audio>
+    <div class="player-meta">
+      <span id="audioMeta">—</span>
+      <span class="tag" id="audioWarn" hidden></span>
+    </div>
+    <div class="downloads">
+      <button type="button" class="btn" id="btnMp3">⬇ MP3 저장</button>
+      <button type="button" class="btn" id="btnSrt">⬇ .srt 자막</button>
+      <button type="button" class="btn ghost" id="btnCopySrt">📋 자막 복사</button>
+    </div>
+  </div>
+
+  <div class="subs" id="subsWrap" hidden>
+    <div class="subs-head">
+      <b>자막 미리보기</b>
+      <span id="subsCount"></span>
+    </div>
+    <ol class="subs-list" id="subsList"></ol>
+  </div>
+
+  <p class="empty" id="emptyState">
+    대본을 넣고 <b>음성 생성</b>을 누르면 음성과 자막이 한 번에 만들어집니다.
+  </p>
+</section>
+
+<!-- ───── 사용 안내 ───── -->
+<details class="pane setup" id="setup">
+  <summary><span>⚙️ 처음 한 번만 — 내 PC에서 서버 켜기</span><i>펼치기</i></summary>
+  <div class="setup-body">
+    <ol class="steps big">
+      <li>
+        <b>ZIP 내려받기</b>
+        <p>아래 버튼으로 <code>tts-studio</code> 폴더를 받아 압축을 풉니다. (원하는 위치 아무 곳이나 OK)</p>
+        <a class="btn" href="https://github.com/anchirong9-arch/tts-studio/archive/refs/heads/main.zip" target="_blank" rel="noopener">⬇ tts-studio.zip</a>
+      </li>
+      <li>
+        <b>실행하기.bat 더블클릭</b>
+        <p>처음 한 번은 자동으로 필요한 패키지(edge-tts)를 설치합니다. 1~2분 걸리고, 그다음부터는 바로 켜집니다. 검은 창은 <b>켜 둔 채로</b> 사용하세요.</p>
+      </li>
+      <li>
+        <b>브라우저가 자동으로 열립니다</b>
+        <p><code>http://127.0.0.1:8765</code> 창에서 작업하면 됩니다. 이 GitHub 화면에서도 서버만 켜져 있으면 그대로 쓸 수 있어요.</p>
+      </li>
+    </ol>
+    <p class="hint">Python이 없다고 나오면 <a href="https://www.python.org/downloads/windows/" target="_blank" rel="noopener">python.org</a>에서 설치하세요. 설치 첫 화면의 <b>“Add python.exe to PATH”</b>를 꼭 체크하세요.</p>
+  </div>
+</details>
+
+<footer class="foot">
+  <span>TTS 스튜디오 · edge-tts 기반 한국어 음성 · 음성은 내 PC에서 만들어집니다</span>
+  <a href="https://github.com/anchirong9-arch/tts-studio" target="_blank" rel="noopener">GitHub</a>
+</footer>
+
+<script src="app.js?v=1"></script>
+</body>
+</html>
