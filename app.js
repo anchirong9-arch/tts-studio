@@ -53,6 +53,7 @@
     error: $('error'), empty: $('emptyState'),
     playerWrap: $('playerWrap'), audio: $('audio'), audioMeta: $('audioMeta'), audioWarn: $('audioWarn'),
     btnMp3: $('btnMp3'), btnSrt: $('btnSrt'), btnCopySrt: $('btnCopySrt'),
+    dlWrap: $('dlWrap'), dlHint: $('dlHint'),
     subsWrap: $('subsWrap'), subsList: $('subsList'), subsCount: $('subsCount'),
     resultMeta: $('resultMeta'),
   };
@@ -479,6 +480,9 @@
     });
     el.subsList.appendChild(frag);
     el.subsWrap.hidden = false;
+    el.dlWrap.hidden = false;
+    el.btnMp3.disabled = !state.audioBlob;
+    el.dlHint.hidden = !!state.audioBlob;
     el.subsCount.textContent = `${cues.length}개 자막 · ${exact ? '실제 음성 타이밍' : '예상 타이밍'}`;
     el.btnSrt.disabled = false;
   }
@@ -490,6 +494,8 @@
     state.words = [];
     el.audio.removeAttribute('src');
     el.playerWrap.hidden = true;
+    el.dlWrap.hidden = true;
+    el.btnMp3.disabled = true;
     el.subsWrap.hidden = true;
     el.subsList.innerHTML = '';
     el.empty.hidden = false;
@@ -529,6 +535,10 @@
     el.btnGenerateText.textContent = '음성 만드는 중…';
     el.btnGenerate.querySelector('.spin').hidden = false;
     el.empty.hidden = true;
+    el.playerWrap.hidden = true;
+    el.dlWrap.hidden = true;
+    el.subsWrap.hidden = true;
+    el.btnMp3.disabled = true;
     if (state.audioUrl) { URL.revokeObjectURL(state.audioUrl); state.audioUrl = null; }
 
     const voice = currentVoice();
@@ -578,6 +588,8 @@
       renderCues(cues, state.words.length > 0);
       state.lastStamp = stamp();
       el.btnMp3.disabled = false;
+      el.dlWrap.hidden = false;
+      el.dlHint.hidden = true;
       el.empty.hidden = true;
       el.subsWrap.hidden = false;
       el.subsList.scrollTop = 0;
