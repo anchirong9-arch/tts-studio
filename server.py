@@ -185,6 +185,11 @@ class Handler(SimpleHTTPRequestHandler):
             if not as_json:
                 as_json = "application/json" in (self.headers.get("Accept") or "")
             return self.handle_tts(as_json)
+        # 알 수 없는 경로라도 본문을 읽어 두어야 keep-alive 연결이 꼬이지 않는다
+        try:
+            self.read_body()
+        except Exception:  # noqa: BLE001
+            pass
         self.json_response({"ok": False, "error": "알 수 없는 경로입니다: %s" % parsed.path}, 404)
 
     # ---------- 상태 ----------
