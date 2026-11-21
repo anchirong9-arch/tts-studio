@@ -211,6 +211,15 @@
     el.resultMeta.textContent = chars
       ? `${chars.toLocaleString('ko-KR')}자 · 예상 ${fmtClock(sec)} · ${vName} ${signed(Number(el.rate.value))}%`
       : '';
+
+    // 대본만 있어도 자막(.srt)은 받을 수 있게 버튼을 열어 둔다
+    if (chars) {
+      el.dlWrap.hidden = false;
+      el.btnMp3.disabled = !state.audioBlob;
+      el.dlHint.hidden = !!state.audioBlob;
+    } else if (!state.audioBlob) {
+      el.dlWrap.hidden = true;
+    }
   }
 
   // ── 서버 연결 ────────────────────────────────────────
