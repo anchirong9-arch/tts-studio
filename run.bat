@@ -27,7 +27,7 @@ if errorlevel 1 goto no_python
 set "PYEXE=python"
 
 :python_ready
-%PYEXE% -c "import sys;sys.exit(0 if sys.version_info>=(3,8) else 1)" >nul 2>nul
+%PYEXE% -c "import sys;sys.exit(0 if sys.version_info>=(3,9) else 1)" >nul 2>nul
 if errorlevel 1 goto old_python
 
 if exist ".venv\Scripts\python.exe" goto have_venv

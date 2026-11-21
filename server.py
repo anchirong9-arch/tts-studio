@@ -56,9 +56,13 @@ def log(msg):
 
 async def _synth_once(text, voice, rate, pitch):
     """edge-tts 1회 호출. 오디오 바이트와 단어 타이밍(ms)을 돌려준다."""
-    communicate = edge_tts.Communicate(
-        text, voice, rate=rate, pitch=pitch, boundary="WordBoundary"
-    )
+    try:
+        communicate = edge_tts.Communicate(
+            text, voice, rate=rate, pitch=pitch, boundary="WordBoundary"
+        )
+    except TypeError:
+        # 예전 edge-tts 는 boundary 인자가 없다 — 단어 타이밍 없이 합성
+        communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
     audio = bytearray()
     words = []
     async for chunk in communicate.stream():

@@ -26,7 +26,7 @@ if errorlevel 1 goto no_python
 set "PYEXE=python"
 
 :python_ready
-%PYEXE% -c "import sys;sys.exit(0 if sys.version_info>=(3,8) else 1)" >nul 2>nul
+%PYEXE% -c "import sys;sys.exit(0 if sys.version_info>=(3,9) else 1)" >nul 2>nul
 if errorlevel 1 goto old_python
 
 if exist ".venv\Scripts\python.exe" goto have_venv
@@ -78,7 +78,7 @@ goto end
 
 :old_python
 echo.
-echo [문제] Python 버전이 너무 낮습니다. 3.8 이상이 필요합니다.
+echo [문제] Python 버전이 너무 낮습니다. 3.9 이상이 필요합니다.
 echo        https://www.python.org/downloads/windows/ 에서 새로 설치해 주세요.
 echo.
 pause

@@ -15,7 +15,7 @@
 4. 그 창에서 대본을 넣고 **음성 생성** → **MP3 저장 / .srt 자막** 을 누르면 끝.
 
 > 검은 창(서버)은 쓰는 동안 **켜 두세요.** 닫으면 음성 생성이 멈춥니다.
-> Python이 없다고 나오면 [python.org](https://www.python.org/downloads/windows/)에서 설치하고, 설치 첫 화면의 **“Add python.exe to PATH”** 를 꼭 체크하세요.
+> Python 3.9 이상이 필요합니다. Python이 없다고 나오면 [python.org](https://www.python.org/downloads/windows/)에서 설치하고, 설치 첫 화면의 **“Add python.exe to PATH”** 를 꼭 체크하세요.
 
 ## 기능
 
@@ -66,6 +66,7 @@ curl -X POST http://127.0.0.1:8765/tts \
 ## 문제 해결
 
 - **“서버 꺼짐”으로 보여요** → `실행하기.bat` 창이 켜져 있는지 확인하고 웹 화면의 **연결 확인**을 누르세요.
+- **Python 3.8 이하라고 나와요** → 3.9 이상을 설치해 주세요.
 - **`pip install` 실패** → 인터넷 연결/방화벽 확인. 사내망이면 집 네트워크에서 시도해 보세요.
 - **소리가 안 나요** → 브라우저 탭이 음소거되지 않았는지, 출력 장치를 확인하세요.
 - **글자가 깨져 보여요** → Windows 10 이상 + 최신 브라우저(Chrome/Edge) 권장.
