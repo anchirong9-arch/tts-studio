@@ -241,7 +241,9 @@
 
   async function checkHealth(quiet = true) {
     if (!quiet) setStatus('checking', '확인 중…');
-    const candidates = IS_LOCAL ? [location.origin, LOCAL_BASE] : [LOCAL_BASE, 'http://localhost:8765'];
+    const candidates = IS_LOCAL
+      ? [location.origin, LOCAL_BASE]
+      : [LOCAL_BASE, 'http://127.0.0.1:8766', 'http://localhost:8765'];
     const seen = new Set();
 
     for (const base of candidates) {
