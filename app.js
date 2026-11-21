@@ -525,6 +525,7 @@
     });
     el.subsList.appendChild(frag);
     el.subsWrap.hidden = false;
+    el.empty.hidden = true;
     el.dlWrap.hidden = false;
     el.btnMp3.disabled = !state.audioBlob;
     el.dlHint.hidden = !!state.audioBlob;
