@@ -212,6 +212,7 @@
       b.type = 'button';
       b.className = 'preset';
       b.dataset.preset = p.id;
+      b.setAttribute('aria-pressed', 'false');
       b.title = `${p.label} · ${(VOICES[p.voice] || {}).name || ''} ${signed(p.rate)}% / ${signed(p.pitch)}Hz`;
       b.innerHTML = `<span class="p-emoji" aria-hidden="true">${p.emoji}</span>` +
         `<span class="p-txt"><b>${escapeHtml(p.label)}</b><small>${escapeHtml(p.note)}</small></span>`;
@@ -231,6 +232,7 @@
       const p = PRESETS.find((x) => x.id === b.dataset.preset);
       const on = !!(p && matchesPreset(p));
       b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
       if (on) active = p;
     });
     if (active) {
@@ -254,6 +256,10 @@
     updateEstimate();
     saveSettings();
     const v = VOICES[p.voice] || {};
+    if (isGtts(p.voice) && state.gtts === false) {
+      toast('번역기 음성은 gTTS 설치가 필요해요 · 실행하기.bat 을 다시 실행해 주세요', 3400);
+      return;
+    }
     toast(`${p.emoji} ${p.label} · ${v.name} ${signed(Number(el.rate.value))}%` +
       (isGtts(p.voice) ? '' : ` / ${signed(Number(el.pitch.value))}Hz`));
   }
