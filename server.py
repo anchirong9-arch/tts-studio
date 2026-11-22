@@ -4,9 +4,12 @@
 TTS 스튜디오 로컬 서버
 ---------------------
 - 웹 UI(index.html)와 정적 파일을 http://127.0.0.1:8765 에서 서빙
-- POST /tts  : {text, voice, rate, pitch} -> audio/mpeg (edge-tts)
+- POST /tts  : {text, voice, rate, pitch} -> audio/mpeg (edge-tts / gTTS)
 - POST /tts?format=json : 같은 요청을 JSON(audio base64 + 단어 타이밍)으로 반환
 - GET  /health : 연결 확인용
+
+목소리는 edge-tts 한국어 3종 + 영어 멀티링궐 2종, 그리고 구글 번역기 기계음(gTTS) 1종입니다.
+"요즘 쇼츠 메타" 프리셋(속도·피치 조합)은 app.js 에 있습니다.
 
 실행:  python server.py            (브라우저 자동 열림)
        python server.py --no-open  (브라우저 안 열림)
@@ -16,6 +19,7 @@ TTS 스튜디오 로컬 서버
 import argparse
 import asyncio
 import base64
+import io
 import json
 import os
 import re
@@ -29,16 +33,31 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SERVER_VERSION = "1.0.0"
+SERVER_VERSION = "1.1.0"
 DEFAULT_PORT = 8765
 MAX_TEXT = 5000
+MAX_TEXT_GTTS = 1500   # 번역기 음성은 문장마다 요청이 나가서 짧게 제한
 
+# 실제로 합성이 되는지 직접 테스트한 화자만 넣는다.
+# (edge-tts 목록에서 내려간 ko-KR 화자들 — JiMin, SeoHyeon, SoonBok, YuJin, BongJin, GookMin — 은 제외)
 VOICES = [
-    {"id": "ko-KR-InJoonNeural", "name": "인준", "gender": "남성", "desc": "차분한 남성 · 뉴스/설명형"},
-    {"id": "ko-KR-SunHiNeural", "name": "선희", "gender": "여성", "desc": "밝은 여성 · 쇼츠/친근한 톤"},
-    {"id": "ko-KR-HyunsuMultilingualNeural", "name": "현수", "gender": "남성", "desc": "부드러운 남성 · 다국어 지원"},
+    {"id": "ko-KR-InJoonNeural", "name": "인준", "gender": "남성", "lang": "ko", "engine": "edge",
+     "desc": "차분한 남성 · 설명/뉴스"},
+    {"id": "ko-KR-SunHiNeural", "name": "선희", "gender": "여성", "lang": "ko", "engine": "edge",
+     "desc": "밝은 여성 · 쇼츠/친근한 톤"},
+    {"id": "ko-KR-HyunsuMultilingualNeural", "name": "현수", "gender": "남성", "lang": "ko", "engine": "edge",
+     "desc": "부드러운 남성 · 다국어/내레이션"},
+    {"id": "en-US-AndrewMultilingualNeural", "name": "앤드루", "gender": "남성", "lang": "en", "engine": "edge",
+     "desc": "영어 밈 · 깊은 톤 (한국어도 읽음)"},
+    {"id": "en-US-AvaMultilingualNeural", "name": "에이바", "gender": "여성", "lang": "en", "engine": "edge",
+     "desc": "영어 밈 · 밝은 톤 (한국어도 읽음)"},
+    {"id": "gtts-ko", "name": "번역기", "gender": "여성", "lang": "ko", "engine": "gtts",
+     "desc": "구글 번역기 기계음 · 짤 메타"},
 ]
 VOICE_IDS = {v["id"] for v in VOICES}
+
+# rate(속도) 를 이 값 이하로 내리면 gTTS 는 slow 모드로 읽는다
+GTTS_SLOW_RATE = -10
 
 try:
     import edge_tts
@@ -46,6 +65,17 @@ try:
 except Exception:  # noqa: BLE001
     edge_tts = None
     EDGE_TTS_VERSION = None
+
+try:
+    from gtts import gTTS as _GTTS
+    try:
+        from gtts import __version__ as _GTTS_VERSION
+    except Exception:  # noqa: BLE001
+        _GTTS_VERSION = "unknown"
+    GTTS_VERSION = _GTTS_VERSION
+except Exception:  # noqa: BLE001
+    _GTTS = None
+    GTTS_VERSION = None
 
 
 def log(msg):
@@ -95,6 +125,38 @@ def synthesize(text, voice, rate, pitch, attempts=3):
             if i < attempts:
                 time.sleep(0.7 * i)
     raise RuntimeError(str(last_error) or "음성 합성에 실패했습니다")
+
+
+def is_gtts_voice(voice):
+    return str(voice or "").startswith("gtts")
+
+
+def synthesize_gtts(text, slow, attempts=2):
+    """구글 번역기 음성(gTTS). 단어 타이밍이 없어 자막은 글자 수로 추정한다."""
+    if _GTTS is None:
+        raise RuntimeError(
+            "번역기 음성(gTTS)이 설치되어 있지 않습니다. 실행하기.bat 을 다시 실행해 주세요."
+        )
+    if len(text) > MAX_TEXT_GTTS:
+        raise ValueError("번역기 음성은 %d자까지 가능합니다. 대본을 나눠 주세요." % MAX_TEXT_GTTS)
+
+    last_error = None
+    for i in range(1, attempts + 1):
+        try:
+            buf = io.BytesIO()
+            _GTTS(text=text, lang="ko", slow=bool(slow)).write_to_fp(buf)
+            data = buf.getvalue()
+            if not data:
+                raise RuntimeError("empty audio")
+            return data, []
+        except ValueError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
+            log("gTTS 실패 %d/%d: %s: %s" % (i, attempts, type(exc).__name__, exc))
+            if i < attempts:
+                time.sleep(0.8 * i)
+    raise RuntimeError(str(last_error) or "번역기 음성 합성에 실패했습니다")
 
 
 # ───────────────────────────── 요청 처리 ─────────────────────────────
@@ -203,10 +265,12 @@ class Handler(SimpleHTTPRequestHandler):
             "service": "tts-studio",
             "version": SERVER_VERSION,
             "edge_tts": EDGE_TTS_VERSION,
+            "gtts": GTTS_VERSION,
             "python": sys.version.split()[0],
             "port": self.server.server_address[1],
             "voices": VOICES,
             "max_text": MAX_TEXT,
+            "max_text_gtts": MAX_TEXT_GTTS,
         }
 
     # ---------- TTS ----------
@@ -238,23 +302,39 @@ class Handler(SimpleHTTPRequestHandler):
             voice = VOICES[0]["id"]
 
         rate_num = clamp_number(payload.get("rate", 0), 0, -50, 100)
-        pitch_num = clamp_number(payload.get("pitch", 0), 0, -50, 50)
+        pitch_num = clamp_number(payload.get("pitch", 0), 0, -100, 100)
         rate = normalize_sign(rate_num) + "%"
         pitch = normalize_sign(pitch_num) + "Hz"
 
         started = time.time()
-        try:
-            audio, words = synthesize(text, voice, rate, pitch)
-        except Exception as exc:  # noqa: BLE001
-            traceback.print_exc()
-            return self.json_response(
-                {
-                    "ok": False,
-                    "error": "음성 합성에 실패했습니다: %s" % exc,
-                    "hint": "인터넷 연결을 확인하고 다시 시도해 주세요.",
-                },
-                502,
-            )
+        if is_gtts_voice(voice):
+            try:
+                audio, words = synthesize_gtts(text, rate_num <= GTTS_SLOW_RATE)
+            except ValueError as exc:
+                return self.json_response({"ok": False, "error": str(exc)}, 400)
+            except Exception as exc:  # noqa: BLE001
+                log("gTTS 합성 실패: %s: %s" % (type(exc).__name__, exc))
+                return self.json_response(
+                    {
+                        "ok": False,
+                        "error": "번역기 음성 생성에 실패했습니다: %s" % exc,
+                        "hint": "구글 번역기 서버가 막혔을 수 있어요. 인터넷을 확인하거나 다른 목소리로 만들어 주세요.",
+                    },
+                    502,
+                )
+        else:
+            try:
+                audio, words = synthesize(text, voice, rate, pitch)
+            except Exception as exc:  # noqa: BLE001
+                traceback.print_exc()
+                return self.json_response(
+                    {
+                        "ok": False,
+                        "error": "음성 합성에 실패했습니다: %s" % exc,
+                        "hint": "인터넷 연결을 확인하고 다시 시도해 주세요.",
+                    },
+                    502,
+                )
 
         duration_ms = 0
         if words:
@@ -267,6 +347,7 @@ class Handler(SimpleHTTPRequestHandler):
                 {
                     "ok": True,
                     "voice": voice,
+                    "engine": "gtts" if is_gtts_voice(voice) else "edge",
                     "rate": rate,
                     "pitch": pitch,
                     "mime": "audio/mpeg",

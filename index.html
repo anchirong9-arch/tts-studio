@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b0d12">
 <title>TTS 스튜디오 — 한국어 음성 + 자막</title>
-<meta name="description" content="한국어 TTS로 쇼츠 대본을 음성(MP3)과 자막(.srt)으로 한 번에. 예상 영상 길이 자동 계산, 속도·피치 조절, 목소리 3종.">
-<link rel="stylesheet" href="style.css?v=10">
+<meta name="description" content="한국어 TTS로 쇼츠 대본을 음성(MP3)과 자막(.srt)으로 한 번에. 예상 영상 길이 자동 계산, 속도·피치 조절, 목소리 6종 + 요즘 쇼츠 메타 프리셋 12종.">
+<link rel="stylesheet" href="style.css?v=11">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%230b0d12'/%3E%3Crect x='13' y='6' width='6' height='13' rx='3' fill='%237c5cff'/%3E%3Cpath d='M8 16a8 8 0 0 0 16 0' stroke='%2322d3ee' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3Cpath d='M16 24v3' stroke='%2322d3ee' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -98,8 +98,17 @@
 
   <!-- ───── 설정 ───── -->
   <aside class="pane settings" aria-label="음성 설정">
-    <div class="pane-head"><h2>목소리</h2></div>
+    <div class="pane-head"><h2>목소리 · 메타</h2></div>
 
+    <div class="presets-block">
+      <div class="presets-head">
+        <h3>요즘 쇼츠 메타</h3>
+        <span id="presetState">한 번에 세팅</span>
+      </div>
+      <div class="presets" id="presets" role="group" aria-label="쇼츠 메타 프리셋"></div>
+    </div>
+
+    <div class="voices-head"><h3>목소리</h3><span id="engineNote"></span></div>
     <div class="voices" id="voices" role="radiogroup" aria-label="목소리 선택">
       <label class="voice on" data-voice="ko-KR-InJoonNeural">
         <input type="radio" name="voice" value="ko-KR-InJoonNeural" checked>
@@ -130,18 +139,50 @@
         </span>
         <button type="button" class="v-play" data-preview="ko-KR-HyunsuMultilingualNeural" title="미리듣기" aria-label="현수 미리듣기">▶</button>
       </label>
+
+      <label class="voice" data-voice="en-US-AndrewMultilingualNeural">
+        <input type="radio" name="voice" value="en-US-AndrewMultilingualNeural">
+        <span class="v-avatar" aria-hidden="true">앤</span>
+        <span class="v-body">
+          <b>앤드루 <em>영어</em></b>
+          <small>영어 밈 · 깊은 톤 (한국어도 읽음)</small>
+        </span>
+        <button type="button" class="v-play" data-preview="en-US-AndrewMultilingualNeural" title="미리듣기" aria-label="앤드루 미리듣기">▶</button>
+      </label>
+
+      <label class="voice" data-voice="en-US-AvaMultilingualNeural">
+        <input type="radio" name="voice" value="en-US-AvaMultilingualNeural">
+        <span class="v-avatar" aria-hidden="true">에</span>
+        <span class="v-body">
+          <b>에이바 <em>영어</em></b>
+          <small>영어 밈 · 밝은 톤 (한국어도 읽음)</small>
+        </span>
+        <button type="button" class="v-play" data-preview="en-US-AvaMultilingualNeural" title="미리듣기" aria-label="에이바 미리듣기">▶</button>
+      </label>
+
+      <label class="voice" data-voice="gtts-ko" data-engine="gtts">
+        <input type="radio" name="voice" value="gtts-ko">
+        <span class="v-avatar" aria-hidden="true">번</span>
+        <span class="v-body">
+          <b>번역기 <em>기계음</em></b>
+          <small>구글 번역기 그 목소리 · 짤 메타</small>
+        </span>
+        <span class="v-flag" id="gttsFlag" hidden>설치 필요</span>
+        <button type="button" class="v-play" data-preview="gtts-ko" title="미리듣기" aria-label="번역기 미리듣기">▶</button>
+      </label>
     </div>
 
     <div class="slider-block">
       <div class="slider-head"><h3>속도</h3><b id="rateValue">+0%</b></div>
-      <input type="range" id="rate" min="-30" max="50" step="5" value="0" aria-label="속도">
+      <input type="range" id="rate" min="-30" max="50" step="1" value="0" aria-label="속도">
       <div class="scale"><span>-30%</span><span>0</span><span>+50%</span></div>
     </div>
 
     <div class="slider-block">
       <div class="slider-head"><h3>피치</h3><b id="pitchValue">+0Hz</b></div>
-      <input type="range" id="pitch" min="-20" max="20" step="5" value="0" aria-label="피치">
-      <div class="scale"><span>-20Hz</span><span>0</span><span>+20Hz</span></div>
+      <input type="range" id="pitch" min="-30" max="60" step="1" value="0" aria-label="피치">
+      <div class="scale"><span>-30Hz</span><span>0</span><span>+60Hz</span></div>
+      <p class="hint" id="engineHint" hidden>번역기 목소리는 속도·피치가 고정입니다. 속도를 -10% 아래로 내리면 천천히 읽어요.</p>
     </div>
 
     <div class="split-block">
@@ -231,6 +272,6 @@
   <a href="https://github.com/anchirong9-arch/tts-studio" target="_blank" rel="noopener">GitHub</a>
 </footer>
 
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>

@@ -7,13 +7,34 @@
   const LOCAL_HOSTS = ['127.0.0.1', 'localhost', '::1', '[::1]'];
   const IS_LOCAL = LOCAL_HOSTS.includes(location.hostname);
   const MAX_TEXT = 5000;
+  const MAX_TEXT_GTTS = 1500;   // 번역기 음성은 문장마다 요청이 나가서 짧게
+  const GTTS_SLOW_RATE = -10;   // 이 속도 이하면 gTTS 가 천천히 읽는다
 
   // 목소리별 초당 글자 수(공백 제외, rate 0% 기준 — 실제 합성으로 측정)
   const VOICES = {
-    'ko-KR-InJoonNeural': { name: '인준', cps: 4.45 },
-    'ko-KR-SunHiNeural': { name: '선희', cps: 5.00 },
-    'ko-KR-HyunsuMultilingualNeural': { name: '현수', cps: 4.72 },
+    'ko-KR-InJoonNeural': { name: '인준', gender: '남', cps: 4.56, engine: 'edge', lang: 'ko' },
+    'ko-KR-SunHiNeural': { name: '선희', gender: '여', cps: 5.15, engine: 'edge', lang: 'ko' },
+    'ko-KR-HyunsuMultilingualNeural': { name: '현수', gender: '남', cps: 4.81, engine: 'edge', lang: 'ko' },
+    'en-US-AndrewMultilingualNeural': { name: '앤드루', gender: '남', cps: 5.13, engine: 'edge', lang: 'en' },
+    'en-US-AvaMultilingualNeural': { name: '에이바', gender: '여', cps: 5.93, engine: 'edge', lang: 'en' },
+    'gtts-ko': { name: '번역기', gender: '여', cps: 4.51, engine: 'gtts', lang: 'ko' },
   };
+
+  // 요즘 한국 쇼츠·릴스·틱톡에서 자주 쓰는 메타 — 누르면 목소리·속도·피치가 한 번에 세팅된다
+  const PRESETS = [
+    { id: 'capcut-m', emoji: '🔥', label: '캡컷 텐션 남', note: '"저 됐어요!" 자극 훅', voice: 'ko-KR-InJoonNeural', rate: 25, pitch: 12 },
+    { id: 'capcut-f', emoji: '🔥', label: '캡컷 텐션 여', note: '리액션·언박싱 훅', voice: 'ko-KR-SunHiNeural', rate: 30, pitch: 10 },
+    { id: 'king', emoji: '😤', label: '킹받는 하이톤', note: '초딩·어그로 짤', voice: 'ko-KR-SunHiNeural', rate: 12, pitch: 50 },
+    { id: 'ssul', emoji: '📖', label: '썰·레딧 스토리', note: '사연·썰툰 내레이션', voice: 'ko-KR-InJoonNeural', rate: 8, pitch: 0 },
+    { id: 'news', emoji: '📰', label: '뉴스 브리핑', note: '사건·이슈 정리', voice: 'ko-KR-InJoonNeural', rate: 5, pitch: -2 },
+    { id: 'doc', emoji: '🎬', label: '다큐·감성', note: '새벽 감성 내레이션', voice: 'ko-KR-HyunsuMultilingualNeural', rate: -12, pitch: -3 },
+    { id: 'uncle', emoji: '👴', label: '묵직한 아저씨', note: '해설·고민 상담 톤', voice: 'ko-KR-InJoonNeural', rate: -12, pitch: -20 },
+    { id: 'asmr', emoji: '😌', label: 'ASMR 속삭임', note: '수면·집중 콘텐츠', voice: 'ko-KR-SunHiNeural', rate: -20, pitch: -5 },
+    { id: 'review', emoji: '🛒', label: '리뷰·꿀팁 친근', note: '제품 리뷰·정보 전달', voice: 'ko-KR-SunHiNeural', rate: 5, pitch: 2 },
+    { id: 'game', emoji: '🎮', label: '게임 아나운서', note: '하이라이트·스포츠', voice: 'ko-KR-InJoonNeural', rate: 35, pitch: 8 },
+    { id: 'meme-en', emoji: '🇺🇸', label: '영어 밈 내레이션', note: '영어 대본·해외 밈', voice: 'en-US-AndrewMultilingualNeural', rate: 10, pitch: 0 },
+    { id: 'gtts', emoji: '🤖', label: '번역기 기계음', note: '킹받는 구글 번역기 짤', voice: 'gtts-ko', rate: 0, pitch: 0 },
+  ];
   const SAMPLE_TEXT = '안녕하세요. 이 목소리는 이렇게 들립니다. 쇼츠 대본을 넣고 생성해 보세요.';
 
   const EX = {
@@ -27,6 +48,7 @@
   const state = {
     base: null,
     online: false,
+    gtts: null,
     audioBlob: null,
     audioUrl: null,
     words: [],
@@ -36,6 +58,7 @@
     busyVoice: null,
     lastStamp: null,
     generatedText: null,
+    preset: null,
   };
 
   // ── DOM ──────────────────────────────────────────────
@@ -49,6 +72,8 @@
     meter: document.querySelector('.meter'), durBadges: $('durBadges'), durNote: $('durNote'),
     voices: $('voices'), rate: $('rate'), rateValue: $('rateValue'),
     pitch: $('pitch'), pitchValue: $('pitchValue'), split: $('split'), splitHint: $('splitHint'),
+    presets: $('presets'), presetState: $('presetState'),
+    engineNote: $('engineNote'), engineHint: $('engineHint'), gttsFlag: $('gttsFlag'),
     btnGenerate: $('btnGenerate'), btnGenerateText: $('btnGenerateText'),
     btnPreview: $('btnPreview'), btnStop: $('btnStop'),
     error: $('error'), empty: $('emptyState'),
@@ -118,10 +143,11 @@
     try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || '{}') || {}; } catch (_) { /* ignore */ }
     if (saved.voice && VOICES[saved.voice]) setVoice(saved.voice, false);
     if (typeof saved.rate === 'number') el.rate.value = String(Math.max(-30, Math.min(50, saved.rate)));
-    if (typeof saved.pitch === 'number') el.pitch.value = String(Math.max(-20, Math.min(20, saved.pitch)));
+    if (typeof saved.pitch === 'number') el.pitch.value = String(Math.max(-30, Math.min(60, saved.pitch)));
     if (saved.split) el.split.value = saved.split;
     if (typeof saved.text === 'string' && saved.text.trim()) el.text.value = saved.text;
     syncSliders();
+    markPreset(saved.preset || null);
   }
 
   let saveTimer = null;
@@ -132,6 +158,7 @@
         localStorage.setItem(STORE_KEY, JSON.stringify({
           voice: currentVoice(), rate: Number(el.rate.value), pitch: Number(el.pitch.value),
           split: el.split.value, text: el.text.value.slice(0, 6000),
+          preset: state.preset,
         }));
       } catch (_) { /* 저장 실패는 무시 */ }
     }, 350);
@@ -143,12 +170,92 @@
     return picked ? picked.value : 'ko-KR-InJoonNeural';
   }
 
+  function isGtts(voice = currentVoice()) {
+    return (VOICES[voice] || {}).engine === 'gtts';
+  }
+
+  function voiceCps(voice, ratePct) {
+    const v = VOICES[voice] || VOICES['ko-KR-InJoonNeural'];
+    if (v.engine === 'gtts') return Number(ratePct) <= GTTS_SLOW_RATE ? 3.73 : 4.51;
+    return v.cps;
+  }
+
   function setVoice(id, persist = true) {
     document.querySelectorAll('input[name="voice"]').forEach((r) => { r.checked = r.value === id; });
     document.querySelectorAll('.voice').forEach((card) => {
       card.classList.toggle('on', card.dataset.voice === id);
     });
     if (persist) { updateEstimate(); saveSettings(); }
+    syncEngineUI();
+    markPreset(state.preset);
+  }
+
+  function syncEngineUI() {
+    const gtts = isGtts();
+    el.pitch.disabled = gtts;
+    el.engineHint.hidden = !gtts;
+    if (state.gtts === false) {
+      el.gttsFlag.hidden = false;
+      el.engineNote.textContent = '번역기 음성 설치 안 됨 · 실행하기.bat 다시 실행';
+    } else {
+      el.gttsFlag.hidden = true;
+      el.engineNote.textContent = gtts ? '구글 번역기 · 속도만 조절' : '';
+    }
+  }
+
+  // ── 요즘 쇼츠 메타 프리셋 ─────────────────────────────
+  function renderPresets() {
+    el.presets.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    PRESETS.forEach((p) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'preset';
+      b.dataset.preset = p.id;
+      b.title = `${p.label} · ${(VOICES[p.voice] || {}).name || ''} ${signed(p.rate)}% / ${signed(p.pitch)}Hz`;
+      b.innerHTML = `<span class="p-emoji" aria-hidden="true">${p.emoji}</span>` +
+        `<span class="p-txt"><b>${escapeHtml(p.label)}</b><small>${escapeHtml(p.note)}</small></span>`;
+      frag.appendChild(b);
+    });
+    el.presets.appendChild(frag);
+  }
+
+  function matchesPreset(p) {
+    return currentVoice() === p.voice && Number(el.rate.value) === p.rate &&
+      (isGtts(p.voice) || Number(el.pitch.value) === p.pitch);
+  }
+
+  function markPreset(fallbackId) {
+    let active = null;
+    el.presets.querySelectorAll('.preset').forEach((b) => {
+      const p = PRESETS.find((x) => x.id === b.dataset.preset);
+      const on = !!(p && matchesPreset(p));
+      b.classList.toggle('on', on);
+      if (on) active = p;
+    });
+    if (active) {
+      state.preset = active.id;
+      el.presetState.textContent = `${active.emoji} ${active.label}`;
+    } else {
+      state.preset = null;
+      el.presetState.textContent = fallbackId ? '직접 설정' : '한 번에 세팅';
+    }
+  }
+
+  function applyPreset(id) {
+    const p = PRESETS.find((x) => x.id === id);
+    if (!p) return;
+    setVoice(p.voice, false);
+    el.rate.value = String(p.rate);
+    el.pitch.value = String(isGtts(p.voice) ? 0 : p.pitch);
+    syncSliders();
+    state.preset = p.id;
+    markPreset();
+    updateEstimate();
+    saveSettings();
+    const v = VOICES[p.voice] || {};
+    toast(`${p.emoji} ${p.label} · ${v.name} ${signed(Number(el.rate.value))}%` +
+      (isGtts(p.voice) ? '' : ` / ${signed(Number(el.pitch.value))}Hz`));
   }
 
   function syncSliders() {
@@ -162,7 +269,7 @@
   function estimate(text, voice, ratePct) {
     const chars = text.replace(/\s/g, '').length;
     if (!chars) return 0;
-    const cps = (VOICES[voice] || VOICES['ko-KR-InJoonNeural']).cps;
+    const cps = voiceCps(voice, ratePct);
     const base = chars / cps / (1 + ratePct / 100);
     const linePauses = Math.max(0, (text.match(/\n/g) || []).length) * 0.18;
     return base + linePauses + 0.15;
@@ -202,10 +309,15 @@
       el.durNote.textContent = `${Math.ceil(sec / 60)}분 — 나눠서 올리는 걸 추천`;
     }
 
-    const over = el.text.value.length > MAX_TEXT;
+    const limit = isGtts() ? MAX_TEXT_GTTS : MAX_TEXT;
+    const over = el.text.value.length > limit;
     el.btnGenerate.disabled = state.generating || !chars || over;
     el.error.hidden = !over;
-    if (over) el.error.innerHTML = `대본이 너무 깁니다. <b>${MAX_TEXT.toLocaleString('ko-KR')}자</b>까지 한 번에 만들 수 있어요.`;
+    if (over) {
+      el.error.innerHTML = isGtts()
+        ? `번역기 음성은 <b>${MAX_TEXT_GTTS.toLocaleString('ko-KR')}자</b>까지 한 번에 만들 수 있어요. 대본을 나눠 주세요.`
+        : `대본이 너무 깁니다. <b>${MAX_TEXT.toLocaleString('ko-KR')}자</b>까지 한 번에 만들 수 있어요.`;
+    }
 
     // 결과 메타
     const vName = (VOICES[currentVoice()] || {}).name || '인준';
@@ -256,10 +368,12 @@
         if (!data || !data.ok) continue;
         state.base = base;
         state.online = true;
+        state.gtts = data.gtts === undefined ? null : !!data.gtts;
         const port = base.replace(/^https?:\/\//, '');
         setStatus('ok', `서버 연결됨 · ${port}`);
         el.notice.hidden = true;
         el.btnGenerate.title = '';
+        syncEngineUI();
         return true;
       } catch (_) { /* 다음 후보 시도 */ }
     }
@@ -391,7 +505,7 @@
     });
 
     // 단어가 없는 큐는 글자 수로 길이 추정
-    const fallbackRate = (VOICES[currentVoice()] || {}).cps || 4.6;
+    const fallbackRate = voiceCps(currentVoice(), Number(el.rate.value)) || 4.6;
     const speed = 1 + Number(el.rate.value) / 100;
     let prevEnd = 0;
     for (const c of cues) {
@@ -452,10 +566,10 @@
   }
 
   // 단어 타이밍 없이(서버 없이) 만드는 추정 자막
-  function estimateCues(text, mode) {
+  function estimateCues(text, mode, totalOverride) {
     const segs = splitSegments(text, mode);
     const rate = Number(el.rate.value);
-    const total = estimate(text, currentVoice(), rate);
+    const total = totalOverride > 0 ? totalOverride : estimate(text, currentVoice(), rate);
     const MAX_CHARS = 34;
 
     const pieces = [];
@@ -569,6 +683,17 @@
     return new Blob([bytes], { type: mime || 'audio/mpeg' });
   }
 
+  // 단어 타이밍이 없는 음성(번역기)은 실제 오디오 길이를 읽어 자막을 맞춘다
+  function audioDuration(url) {
+    return new Promise((resolve) => {
+      const probe = new Audio();
+      probe.preload = 'metadata';
+      probe.onloadedmetadata = () => resolve(Number.isFinite(probe.duration) ? probe.duration : 0);
+      probe.onerror = () => resolve(0);
+      probe.src = url;
+    });
+  }
+
   // ── 생성 ────────────────────────────────────────────
   async function generate() {
     if (state.generating) return;
@@ -599,7 +724,7 @@
 
     const voice = currentVoice();
     const rate = Number(el.rate.value);
-    const pitch = Number(el.pitch.value);
+    const pitch = isGtts(voice) ? 0 : Number(el.pitch.value);
     const body = JSON.stringify({ text, voice, rate: signed(rate) + '%', pitch: signed(pitch) + 'Hz' });
     const started = Date.now();
 
@@ -635,12 +760,19 @@
       el.audio.src = state.audioUrl;
       el.playerWrap.hidden = false;
 
-      const total = (data.duration_ms || 0) / 1000;
+      const total = state.words.length
+        ? (data.duration_ms || 0) / 1000
+        : (await audioDuration(state.audioUrl)) || (data.duration_ms || 0) / 1000;
       const elapsed = ((Date.now() - started) / 1000).toFixed(1);
-      el.audioMeta.textContent = `${fmtClock(total)} · ${(state.audioBlob.size / 1024).toFixed(0)}KB · ${(VOICES[voice] || {}).name || ''} ${signed(rate)}% / ${signed(pitch)}Hz · ${elapsed}초 만에 생성`;
+      const pitchTxt = isGtts(voice)
+        ? (rate <= GTTS_SLOW_RATE ? '느리게' : '기본')
+        : `${signed(pitch)}Hz`;
+      el.audioMeta.textContent = `${fmtClock(total)} · ${(state.audioBlob.size / 1024).toFixed(0)}KB · ${(VOICES[voice] || {}).name || ''} ${signed(rate)}% / ${pitchTxt} · ${elapsed}초 만에 생성`;
       el.audioWarn.hidden = true;
 
-      const cues = makeCues(text, state.words, el.split.value);
+      const cues = state.words.length
+        ? makeCues(text, state.words, el.split.value)
+        : estimateCues(text, el.split.value, total);
       renderCues(cues, state.words.length > 0);
       state.lastStamp = stamp();
       state.generatedText = text;
@@ -676,8 +808,12 @@
     const list = window.speechSynthesis ? speechSynthesis.getVoices() : [];
     const ko = list.filter((v) => /ko/i.test(v.lang));
     if (!ko.length) return null;
-    const want = currentVoice();
-    if (want === 'ko-KR-SunHiNeural') return ko.find((v) => /female|여성/i.test(v.name)) || ko[0];
+    const want = VOICES[currentVoice()] || {};
+    if (want.lang === 'en') {
+      const en = list.filter((v) => /^en/i.test(v.lang));
+      if (en.length) return en.find((v) => (want.gender === '여' ? /female|Samantha|Zira|Google US English/i.test(v.name) : /male|David|Daniel|Alex/i.test(v.name))) || en[0];
+    }
+    if (want.gender === '여') return ko.find((v) => /female|여성/i.test(v.name)) || ko[0];
     return ko.find((v) => /male|남성/i.test(v.name)) || ko[0];
   }
 
@@ -809,8 +945,8 @@
       updateEstimate();
       saveSettings();
     });
-    el.rate.addEventListener('input', () => { syncSliders(); updateEstimate(); saveSettings(); });
-    el.pitch.addEventListener('input', () => { syncSliders(); saveSettings(); });
+    el.rate.addEventListener('input', () => { syncSliders(); updateEstimate(); markPreset(); saveSettings(); });
+    el.pitch.addEventListener('input', () => { syncSliders(); updateEstimate(); markPreset(); saveSettings(); });
     el.split.addEventListener('change', () => {
       const hint = {
         auto: '한 자막이 너무 길면 읽기 좋게 다시 나눕니다.',
@@ -829,6 +965,10 @@
 
     el.voices.addEventListener('change', (e) => {
       if (e.target && e.target.name === 'voice') { setVoice(e.target.value); }
+    });
+    el.presets.addEventListener('click', (e) => {
+      const btn = e.target.closest('.preset');
+      if (btn) applyPreset(btn.dataset.preset);
     });
     el.voices.addEventListener('click', (e) => {
       const btn = e.target.closest('.v-play');
@@ -905,8 +1045,10 @@
   }
 
   // ── 시작 ────────────────────────────────────────────
+  renderPresets();
   loadSettings();
   bind();
+  syncEngineUI();
   updateEstimate();
   checkHealth(true);
   if (window.speechSynthesis) {

@@ -40,10 +40,10 @@ goto check_pkg
 echo [1/3] 준비된 환경을 찾았습니다.
 
 :check_pkg
-".venv\Scripts\python.exe" -c "import edge_tts" >nul 2>nul
+".venv\Scripts\python.exe" -c "import edge_tts, gtts" >nul 2>nul
 if not errorlevel 1 goto run_server
 
-echo [2/3] 필요한 패키지(edge-tts)를 설치하는 중...
+echo [2/3] 필요한 패키지(edge-tts, gTTS)를 설치하는 중...
 ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check -q -r requirements.txt
 if errorlevel 1 goto pip_fail
 goto run_server

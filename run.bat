@@ -40,10 +40,10 @@ goto check_pkg
 echo [1/3] Found existing environment.
 
 :check_pkg
-".venv\Scripts\python.exe" -c "import edge_tts" >nul 2>nul
+".venv\Scripts\python.exe" -c "import edge_tts, gtts" >nul 2>nul
 if not errorlevel 1 goto run_server
 
-echo [2/3] Installing required package (edge-tts)...
+echo [2/3] Installing required packages (edge-tts, gTTS)...
 ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check -q -r requirements.txt
 if errorlevel 1 goto pip_fail
 goto run_server
