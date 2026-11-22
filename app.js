@@ -9,6 +9,7 @@
   const MAX_TEXT = 5000;
   const MAX_TEXT_GTTS = 1500;   // 번역기 음성은 문장마다 요청이 나가서 짧게
   const GTTS_SLOW_RATE = -10;   // 이 속도 이하면 gTTS 가 천천히 읽는다
+  const SERVER_EXPECTED = '1.1.0';  // 이 버전보다 낮은 로컬 서버는 새 목소리를 모른다
 
   // 목소리별 초당 글자 수(공백 제외, rate 0% 기준 — 실제 합성으로 측정)
   const VOICES = {
@@ -49,6 +50,8 @@
     base: null,
     online: false,
     gtts: null,
+    serverVersion: null,
+    staleWarned: false,
     audioBlob: null,
     audioUrl: null,
     words: [],
@@ -194,6 +197,11 @@
     const gtts = isGtts();
     el.pitch.disabled = gtts;
     el.engineHint.hidden = !gtts;
+    if (state.serverVersion && state.serverVersion !== SERVER_EXPECTED) {
+      el.gttsFlag.hidden = true;
+      el.engineNote.textContent = `서버 ${state.serverVersion} · ZIP 다시 받기`;
+      return;
+    }
     if (state.gtts === false) {
       el.gttsFlag.hidden = false;
       el.engineNote.textContent = '번역기 음성 설치 안 됨 · 실행하기.bat 다시 실행';
@@ -375,6 +383,11 @@
         state.base = base;
         state.online = true;
         state.gtts = data.gtts === undefined ? null : !!data.gtts;
+        state.serverVersion = data.version || null;
+        if (data.version && data.version !== SERVER_EXPECTED && !state.staleWarned) {
+          state.staleWarned = true;
+          setTimeout(() => toast(`로컬 서버가 예전 버전(${data.version})이에요 · ZIP을 다시 받아 주세요`, 4200), 600);
+        }
         const port = base.replace(/^https?:\/\//, '');
         setStatus('ok', `서버 연결됨 · ${port}`);
         el.notice.hidden = true;
